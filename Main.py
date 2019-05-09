@@ -1,3 +1,8 @@
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+from random import sample
+
 
 def create_variable(name, shape):
     initializer = tf.contrib.layers.xavier_initializer_conv2d()
@@ -208,57 +213,60 @@ def main(sample_length, use_bias, use_initialfilter,
     dilations, residual_channels, 
     dilation_channels, skip_channels, 
     filter_width, learning_rate):
-    with tf.name_scope('wavenet'):
-        input_batch = tf.placeholder(tf.float32, shape = [None, sample_length, initial_channels])
 
-    variables = create_variables(use_initialfilter, initial_filter_width, 
-    initial_channels, residual_channels, dilations, filter_width, 
-    dilation_channels, skip_channels, use_bias)
+with tf.name_scope('wavenet'):
+    input_batch = tf.placeholder(tf.float32, shape = [None, sample_length, initial_channels])
 
-    receptive_field = ((filter_width - 1) * sum(dilations) + 1 + filter_width - 1)
+lr = tf.placeholder(tf.float32, shape = [])
 
-    raw_output = create_network(input_batch, initial_channels, filter_width, dilations, variables, use_bias, receptive_field)
-    loss = loss(input_batch, raw_output, initial_channels, receptive_field)
-    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate,
-                                  epsilon=1e-4)
-    trainable = tf.trainable_variables()
+variables = create_variables(use_initialfilter, initial_filter_width, 
+initial_channels, residual_channels, dilations, filter_width, 
+dilation_channels, skip_channels, use_bias)
 
-    optim = optimizer.minimize(loss, var_list=trainable)
+receptive_field = ((filter_width - 1) * sum(dilations) + 1 + filter_width - 1)
 
-    sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-    init = tf.global_variables_initializer()
-    sess.run(init)
+raw_output = create_network(input_batch, initial_channels, filter_width, dilations, variables, use_bias, receptive_field)
+loss = loss(input_batch, raw_output, initial_channels, receptive_field)
+optimizer = tf.train.AdamOptimizer(learning_rate=lr,
+                              epsilon=1e-5)
+trainable = tf.trainable_variables()
 
-    df = pd.read_csv(r"C:\Users\scy23\Dropbox\Projects\WaveNet\FXWave\Data_Combined\df_logret.csv")
-    df_train = np.array(df.iloc[:200000])
+optim = optimizer.minimize(loss, var_list=trainable)
 
-    loss_list = []
-    ts_test = np.copy(df_train[0:7200,:].reshape([1,7200, -1]))
-    for step in range(1000):
-        r_idx = sample(range(len(df_train) - 7200),1)[0]
-        ts = np.copy(df_train[r_idx:r_idx+7200,:].reshape([1,7200, -1]))
-        for t in range(5):
-            loss_value, _ = sess.run([loss, optim], feed_dict={input_batch: ts})
-        loss_value_test = sess.run(loss, feed_dict={input_batch: ts_test})
-        loss_list.append(loss_value_test)
-        if len(loss_list)>50:
-            print(np.average(loss_list[-50:]))
+sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+init = tf.global_variables_initializer()
+sess.run(init)
+
+df = pd.read_csv(r"C:\Users\scy23\Dropbox\Projects\WaveNet\FXWave\Data_Combined\df_logret.csv")
+df_train = np.array(df.iloc[:200000])
+
+loss_list = []
+ts_test = np.copy(df_train[0:sample_length,:].reshape([1,sample_length, -1]))
+for step in range(100):
+    r_idx = sample(range(len(df_train) - sample_length),1)[0]
+    ts = np.copy(df_train[r_idx:r_idx+sample_length,:].reshape([1,sample_length, -1]))
+    for t in range(1):
+        loss_value, _ = sess.run([loss, optim], feed_dict={input_batch: ts, lr: learning_rate})
+    loss_value_test = sess.run(loss, feed_dict={input_batch: ts_test})
+    loss_list.append(loss_value_test)
+    if len(loss_list)>1:
+        print(np.average(loss_list[-1:]))
 
 
 
 
 if __name__ == "__main__":
 
-use_bias = True
+use_bias = False
 use_initialfilter = True
 initial_filter_width = 2
 initial_channels = 8######10
 dilations = [1, 2, 4, 8, 16, 32, 64, 128, 256]
-residual_channels = 32
-dilation_channels = 32
+residual_channels = 64
+dilation_channels = 64
 skip_channels = 512
 filter_width = 2
-learning_rate = 0.01
+learning_rate = 1
 sample_length = 7200
 
     main(use_bias, use_initialfilter, initial_filter_width, initial_channels,
